@@ -724,7 +724,24 @@ export class BrowserManager {
       throw new Error('cdpPort is required for CDP connection');
     }
 
-    const browser = await chromium.connectOverCDP(`http://localhost:${cdpPort}`).catch(() => {
+    // Workaround: Fetch WebSocket URL first for better compatibility
+    // See: https://github.com/vercel-labs/agent-browser/issues/135
+    let wsUrl: string;
+    try {
+      const response = await fetch(`http://localhost:${cdpPort}/json/version`);
+      const data = (await response.json()) as { webSocketDebuggerUrl?: string };
+      wsUrl = data.webSocketDebuggerUrl ?? '';
+      if (!wsUrl) {
+        throw new Error('No webSocketDebuggerUrl in response');
+      }
+    } catch (err) {
+      throw new Error(
+        `Failed to connect via CDP on port ${cdpPort}. ` +
+          `Make sure the app is running with --remote-debugging-port=${cdpPort}`
+      );
+    }
+
+    const browser = await chromium.connectOverCDP(wsUrl).catch(() => {
       throw new Error(
         `Failed to connect via CDP on port ${cdpPort}. ` +
           `Make sure the app is running with --remote-debugging-port=${cdpPort}`
