@@ -36,6 +36,7 @@ const navigateSchema = baseCommandSchema.extend({
   action: z.literal('navigate'),
   url: z.string().min(1),
   waitUntil: z.enum(['load', 'domcontentloaded', 'networkidle']).optional(),
+  headers: z.record(z.string()).optional(),
 });
 
 const clickSchema = baseCommandSchema.extend({
@@ -303,6 +304,11 @@ const countSchema = baseCommandSchema.extend({
 
 const boundingBoxSchema = baseCommandSchema.extend({
   action: z.literal('boundingbox'),
+  selector: z.string().min(1),
+});
+
+const stylesSchema = baseCommandSchema.extend({
+  action: z.literal('styles'),
   selector: z.string().min(1),
 });
 
@@ -670,7 +676,7 @@ const pressSchema = baseCommandSchema.extend({
 
 const screenshotSchema = baseCommandSchema.extend({
   action: z.literal('screenshot'),
-  path: z.string().optional(),
+  path: z.string().nullable().optional(),
   fullPage: z.boolean().optional(),
   selector: z.string().min(1).optional(),
   format: z.enum(['png', 'jpeg']).optional(),
@@ -730,6 +736,7 @@ const closeSchema = baseCommandSchema.extend({
 // Tab/Window schemas
 const tabNewSchema = baseCommandSchema.extend({
   action: z.literal('tab_new'),
+  url: z.string().min(1).optional(),
 });
 
 const tabListSchema = baseCommandSchema.extend({
@@ -819,6 +826,7 @@ const commandSchema = z.discriminatedUnion('action', [
   isCheckedSchema,
   countSchema,
   boundingBoxSchema,
+  stylesSchema,
   videoStartSchema,
   videoStopSchema,
   recordingStartSchema,

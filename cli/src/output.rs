@@ -1,3 +1,4 @@
+use crate::color;
 use crate::connection::Response;
 
 pub fn print_response(resp: &Response, json_mode: bool) {
@@ -8,7 +9,8 @@ pub fn print_response(resp: &Response, json_mode: bool) {
 
     if !resp.success {
         eprintln!(
-            "\x1b[31m✗\x1b[0m {}",
+            "{} {}",
+            color::error_indicator(),
             resp.error.as_deref().unwrap_or("Unknown error")
         );
         return;
@@ -18,8 +20,8 @@ pub fn print_response(resp: &Response, json_mode: bool) {
         // Navigation response
         if let Some(url) = data.get("url").and_then(|v| v.as_str()) {
             if let Some(title) = data.get("title").and_then(|v| v.as_str()) {
-                println!("\x1b[32m✓\x1b[0m \x1b[1m{}\x1b[0m", title);
-                println!("\x1b[2m  {}\x1b[0m", url);
+                println!("{} {}", color::success_indicator(), color::bold(title));
+                println!("  {}", color::dim(url));
                 return;
             }
             println!("{}", url);
@@ -85,7 +87,7 @@ pub fn print_response(resp: &Response, json_mode: bool) {
                     .unwrap_or("Untitled");
                 let url = tab.get("url").and_then(|v| v.as_str()).unwrap_or("");
                 let active = tab.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
-                let marker = if active { "→" } else { " " };
+                let marker = if active { color::cyan("→") } else { " ".to_string() };
                 println!("{} [{}] {} - {}", marker, i, title, url);
             }
             return;
@@ -95,13 +97,7 @@ pub fn print_response(resp: &Response, json_mode: bool) {
             for log in logs {
                 let level = log.get("type").and_then(|v| v.as_str()).unwrap_or("log");
                 let text = log.get("text").and_then(|v| v.as_str()).unwrap_or("");
-                let color = match level {
-                    "error" => "\x1b[31m",
-                    "warning" => "\x1b[33m",
-                    "info" => "\x1b[36m",
-                    _ => "\x1b[0m",
-                };
-                println!("{}[{}]\x1b[0m {}", color, level, text);
+                println!("{} {}", color::console_level_prefix(level), text);
             }
             return;
         }
@@ -109,7 +105,7 @@ pub fn print_response(resp: &Response, json_mode: bool) {
         if let Some(errors) = data.get("errors").and_then(|v| v.as_array()) {
             for err in errors {
                 let msg = err.get("message").and_then(|v| v.as_str()).unwrap_or("");
-                println!("\x1b[31m✗\x1b[0m {}", msg);
+                println!("{} {}", color::error_indicator(), msg);
             }
             return;
         }
@@ -130,18 +126,52 @@ pub fn print_response(resp: &Response, json_mode: bool) {
             );
             return;
         }
+        // Element styles
+        if let Some(elements) = data.get("elements").and_then(|v| v.as_array()) {
+            for (i, el) in elements.iter().enumerate() {
+                let tag = el.get("tag").and_then(|v| v.as_str()).unwrap_or("?");
+                let text = el.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                println!("[{}] {} \"{}\"", i, tag, text);
+                
+                if let Some(box_data) = el.get("box") {
+                    let w = box_data.get("width").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let h = box_data.get("height").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let x = box_data.get("x").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let y = box_data.get("y").and_then(|v| v.as_i64()).unwrap_or(0);
+                    println!("    box: {}x{} at ({}, {})", w, h, x, y);
+                }
+                
+                if let Some(styles) = el.get("styles") {
+                    let font_size = styles.get("fontSize").and_then(|v| v.as_str()).unwrap_or("");
+                    let font_weight = styles.get("fontWeight").and_then(|v| v.as_str()).unwrap_or("");
+                    let font_family = styles.get("fontFamily").and_then(|v| v.as_str()).unwrap_or("");
+                    let color = styles.get("color").and_then(|v| v.as_str()).unwrap_or("");
+                    let bg = styles.get("backgroundColor").and_then(|v| v.as_str()).unwrap_or("");
+                    let radius = styles.get("borderRadius").and_then(|v| v.as_str()).unwrap_or("");
+                    
+                    println!("    font: {} {} {}", font_size, font_weight, font_family);
+                    println!("    color: {}", color);
+                    println!("    background: {}", bg);
+                    if radius != "0px" {
+                        println!("    border-radius: {}", radius);
+                    }
+                }
+                println!();
+            }
+            return;
+        }
         // Closed
         if data.get("closed").is_some() {
-            println!("\x1b[32m✓\x1b[0m Browser closed");
+            println!("{} Browser closed", color::success_indicator());
             return;
         }
         // Recording start (has "started" field)
         if let Some(started) = data.get("started").and_then(|v| v.as_bool()) {
             if started {
                 if let Some(path) = data.get("path").and_then(|v| v.as_str()) {
-                    println!("\x1b[32m✓\x1b[0m Recording started: {}", path);
+                    println!("{} Recording started: {}", color::success_indicator(), path);
                 } else {
-                    println!("\x1b[32m✓\x1b[0m Recording started");
+                    println!("{} Recording started", color::success_indicator());
                 }
                 return;
             }
@@ -150,9 +180,9 @@ pub fn print_response(resp: &Response, json_mode: bool) {
         if data.get("stopped").is_some() {
             let path = data.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
             if let Some(prev_path) = data.get("previousPath").and_then(|v| v.as_str()) {
-                println!("\x1b[32m✓\x1b[0m Recording restarted: {} (previous saved to {})", path, prev_path);
+                println!("{} Recording restarted: {} (previous saved to {})", color::success_indicator(), path, prev_path);
             } else {
-                println!("\x1b[32m✓\x1b[0m Recording started: {}", path);
+                println!("{} Recording started: {}", color::success_indicator(), path);
             }
             return;
         }
@@ -160,22 +190,27 @@ pub fn print_response(resp: &Response, json_mode: bool) {
         if data.get("frames").is_some() {
             if let Some(path) = data.get("path").and_then(|v| v.as_str()) {
                 if let Some(error) = data.get("error").and_then(|v| v.as_str()) {
-                    println!("\x1b[33m⚠\x1b[0m Recording saved to {} - {}", path, error);
+                    println!("{} Recording saved to {} - {}", color::warning_indicator(), path, error);
                 } else {
-                    println!("\x1b[32m✓\x1b[0m Recording saved to {}", path);
+                    println!("{} Recording saved to {}", color::success_indicator(), path);
                 }
             } else {
-                println!("\x1b[32m✓\x1b[0m Recording stopped");
+                println!("{} Recording stopped", color::success_indicator());
             }
             return;
         }
         // Screenshot path (no "started" or "frames" field)
         if let Some(path) = data.get("path").and_then(|v| v.as_str()) {
-            println!("\x1b[32m✓\x1b[0m Screenshot saved to {}", path);
+            println!("{} Screenshot saved to {}", color::success_indicator(), color::green(path));
+            return;
+        }
+        // Screenshot base64
+        if let Some(base64) = data.get("base64").and_then(|v| v.as_str()) {
+            println!("{}", base64);
             return;
         }
         // Default success
-        println!("\x1b[32m✓\x1b[0m Done");
+        println!("{} Done", color::success_indicator());
     }
 }
 
@@ -384,9 +419,9 @@ Examples:
         "select" => r##"
 agent-browser select - Select a dropdown option
 
-Usage: agent-browser select <selector> <value>
+Usage: agent-browser select <selector> <value...>
 
-Selects an option in a <select> dropdown by its value attribute.
+Selects one or more options in a <select> dropdown by value.
 
 Global Options:
   --json               Output as JSON
@@ -395,6 +430,7 @@ Global Options:
 Examples:
   agent-browser select "#country" "US"
   agent-browser select @e5 "option2"
+  agent-browser select "#menu" "opt1" "opt2" "opt3"
 "##,
         "drag" => r##"
 agent-browser drag - Drag and drop
@@ -676,6 +712,7 @@ Subcommands:
   url                        Get current URL
   count <selector>           Count matching elements
   box <selector>             Get bounding box (x, y, width, height)
+  styles <selector>          Get computed styles of elements
 
 Global Options:
   --json               Output as JSON
@@ -690,6 +727,8 @@ Examples:
   agent-browser get url
   agent-browser get count "li.item"
   agent-browser get box "#header"
+  agent-browser get styles "button"
+  agent-browser get styles @e1
 "##,
 
         // === Is ===
@@ -1191,7 +1230,7 @@ Core Commands:
   focus <sel>                Focus element
   check <sel>                Check checkbox
   uncheck <sel>              Uncheck checkbox
-  select <sel> <val>         Select dropdown option
+  select <sel> <val...>      Select dropdown option
   drag <src> <dst>           Drag and drop
   upload <sel> <files...>    Upload files
   scroll <dir> [px]          Scroll (up/down/left/right)
@@ -1209,7 +1248,7 @@ Navigation:
   reload                     Reload page
 
 Get Info:  agent-browser get <what> [selector]
-  text, html, value, attr <name>, title, url, count, box
+  text, html, value, attr <name>, title, url, count, box, styles
 
 Check State:  agent-browser is <what> <selector>
   visible, enabled, checked
